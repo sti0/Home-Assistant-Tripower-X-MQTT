@@ -1,0 +1,5 @@
+venv/
+
+sma2mqtt.yaml
+
+__pycache__
