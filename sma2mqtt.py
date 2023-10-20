@@ -1,25 +1,25 @@
-from ha_mqtt_discoverable import Settings
-from ha_mqtt_discoverable.sensors import SensorInfo, Sensor, DeviceInfo
-import json
-import time
-import requests
-import yaml
-import sys
 import logging
-import threading
+import os
 import socket
 import struct
+import sys
+import threading
+import time
 
-from yaml.loader import SafeLoader
-from speedwiredecoder import decode_speedwire
-
+import requests
 import urllib3
+import yaml
+from ha_mqtt_discoverable import Settings
+from ha_mqtt_discoverable.sensors import DeviceInfo, Sensor, SensorInfo
+from yaml.loader import SafeLoader
+
+from speedwiredecoder import decode_speedwire
 
 urllib3.disable_warnings()
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(message)s",
-    level=logging.ERROR,
+    level=logging.INFO,
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
@@ -89,14 +89,14 @@ def updateTripower(cfg, mqtt_settings):
     try:
         x = requests.post(loginurl, data=postdata, timeout=5, verify=False)
     except requests.exceptions.ConnectTimeout:
-        print("Inverter not reachable via HTTP.")
-        print(
+        logging.error("Inverter not reachable via HTTP.")
+        logging.error(
             "Please test the following URL in a browser: " + "https://" + cfg["Address"]
         )
         sys.exit(1)
     if "Content-Length" in x.headers and x.headers["Content-Length"] == "0":
-        print("Username or Password wrong.")
-        print(
+        logging.error("Username or Password wrong.")
+        logging.error(
             "Please test the following URL in a browser: " + "https://" + cfg["Address"]
         )
         sys.exit(1)
@@ -116,7 +116,7 @@ def updateTripower(cfg, mqtt_settings):
         manufacturer=dev["vendor"],
         sw_version=dev["firmwareVersion"],
     )
-    print("connection successful")
+    logging.info("connection to the inverter successful")
 
     exitafter = cfg.get("ExitAfter", None)
     while exitafter is None or exitafter > 0:
@@ -176,7 +176,8 @@ def updateTripower(cfg, mqtt_settings):
 
             time.sleep(cfg["UpdateTimeSec"])
         except requests.ConnectionError:
-            logging.error("Lost connection. Retry.")
+            logging.error("Lost connection. EXIT.")
+            sys.exit(-1)
         except TimeoutError:
             pass
 
@@ -263,6 +264,14 @@ def updatePowerMeter(cfg, mqtt_settings):
             #                 manufacturer = dev["vendor"],
             #                 sw_version = dev['firmwareVersion'])
 
+
+def raise_and_exit(args):
+    """Raise and exit if one thread fails."""
+    threading.Timer(0.01, os._exit, args=(1,)).start()
+    raise args[0]
+
+
+threading.excepthook = raise_and_exit
 
 cfgfile = "sma2mqtt.yaml" if (len(sys.argv) == 1) else sys.argv[1]
 print(cfgfile)
